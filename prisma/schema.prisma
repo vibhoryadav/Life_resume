@@ -1,0 +1,459 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  VERIFIER
+  INSTITUTION_ADMIN
+  SUPER_ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  PRIVATE
+  RESTRICTED
+}
+
+enum AchievementCategory {
+  LEADERSHIP
+  ENTREPRENEURSHIP
+  ACADEMICS
+  SPORTS
+  ARTS
+  VOLUNTEERING
+  EVENTS
+  TECHNOLOGY
+  RESEARCH
+  COMPETITIONS
+  CERTIFICATIONS
+  PROFESSIONAL_EXPERIENCE
+  OTHER
+}
+
+enum VerificationStatus {
+  SELF_REPORTED
+  EVIDENCE_ATTACHED
+  VERIFICATION_REQUESTED
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+  UNLISTED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum SkillProficiency {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum ResumeType {
+  INTERNSHIP
+  JOB
+  COLLEGE_APPLICATION
+  SCHOLARSHIP
+  FOUNDER
+}
+
+enum ResumeTemplate {
+  MODERN_MINIMAL
+  EXECUTIVE_IVORY
+  TECH_FOCUS
+}
+
+enum InstitutionRole {
+  ADMIN
+  MEMBER
+  VERIFIER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PENDING
+  INACTIVE
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  INSTITUTION
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+}
+
+enum NotificationType {
+  VERIFICATION
+  SYSTEM
+  RESUME
+  SECURITY
+}
+
+enum ReportStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id                      String            @id @default(uuid())
+  email                   String            @unique
+  full_name               String
+  password_hash           String?
+  avatar_url              String?
+  date_of_birth           DateTime?
+  bio                     String?
+  location                String?
+  account_status          AccountStatus     @default(ACTIVE)
+  role                    Role              @default(USER)
+  email_verified          Boolean           @default(false)
+  email_verification_token String?
+  password_reset_token    String?
+  password_reset_expires  DateTime?
+  created_at              DateTime          @default(now())
+  updated_at              DateTime          @updatedAt
+
+  profile                 UserProfile?
+  achievements            Achievement[]
+  evidence                Evidence[]
+  verificationRequestsSent VerificationRequest[] @relation("Requester")
+  verificationRequestsReceived VerificationRequest[] @relation("Verifier")
+  verificationRecords     VerificationRecord[]
+  userSkills              UserSkill[]
+  educations              Education[]
+  projects                Project[]
+  recommendationsReceived Recommendation[] @relation("UserRecommendations")
+  recommendationsGiven    Recommendation[] @relation("Recommender")
+  resumes                 Resume[]
+  institutionMemberships  InstitutionMembership[]
+  subscription            Subscription?
+  notifications           Notification[]
+  reportsCreated          Report[]          @relation("Reporter")
+  reportsAgainst          Report[]          @relation("ReportedUser")
+
+  @@index([email])
+  @@index([role])
+  @@index([account_status])
+}
+
+model UserProfile {
+  id                      String            @id @default(uuid())
+  user_id                 String            @unique
+  user                    User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  headline                String?
+  education_summary       String?
+  professional_summary    String?
+  public_profile_enabled  Boolean           @default(false)
+  custom_username         String            @unique
+  profile_visibility      ProfileVisibility @default(PUBLIC)
+  created_at              DateTime          @default(now())
+  updated_at              DateTime          @updatedAt
+
+  @@index([custom_username])
+  @@index([public_profile_enabled])
+}
+
+model Achievement {
+  id                  String              @id @default(uuid())
+  user_id             String
+  user                User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  title               String
+  description         String
+  category            AchievementCategory
+  organization        String?
+  role                String?
+  start_date          DateTime?
+  end_date            DateTime?
+  measurable_impact   String?
+  location            String?
+  verification_status VerificationStatus  @default(SELF_REPORTED)
+  visibility          Visibility          @default(PUBLIC)
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
+
+  evidence            Evidence[]
+  verificationRequests VerificationRequest[]
+  verificationRecords VerificationRecord[]
+  achievementSkills   AchievementSkill[]
+  reports             Report[]
+
+  @@index([user_id])
+  @@index([category])
+  @@index([verification_status])
+  @@index([visibility])
+}
+
+model Evidence {
+  id              String      @id @default(uuid())
+  achievement_id  String
+  achievement     Achievement @relation(fields: [achievement_id], references: [id], onDelete: Cascade)
+  uploaded_by     String
+  uploader        User        @relation(fields: [uploaded_by], references: [id], onDelete: Cascade)
+  file_name       String
+  file_type       String
+  storage_path    String
+  file_size       Int
+  description     String?
+  created_at      DateTime    @default(now())
+
+  @@index([achievement_id])
+  @@index([uploaded_by])
+}
+
+model VerificationRequest {
+  id                      String         @id @default(uuid())
+  achievement_id          String
+  achievement             Achievement    @relation(fields: [achievement_id], references: [id], onDelete: Cascade)
+  requester_id            String
+  requester               User           @relation("Requester", fields: [requester_id], references: [id], onDelete: Cascade)
+  verifier_email          String
+  verifier_id             String?
+  verifier                User?          @relation("Verifier", fields: [verifier_id], references: [id], onDelete: SetNull)
+  verification_token_hash String         @unique
+  status                  RequestStatus  @default(PENDING)
+  message                 String?
+  expires_at              DateTime
+  created_at              DateTime       @default(now())
+  updated_at              DateTime       @updatedAt
+
+  @@index([achievement_id])
+  @@index([requester_id])
+  @@index([verifier_email])
+  @@index([verification_token_hash])
+  @@index([status])
+}
+
+model VerificationRecord {
+  id                    String      @id @default(uuid())
+  achievement_id        String
+  achievement           Achievement @relation(fields: [achievement_id], references: [id], onDelete: Cascade)
+  verifier_id           String?
+  verifier              User?       @relation(fields: [verifier_id], references: [id], onDelete: SetNull)
+  verifier_name         String
+  verifier_organization String?
+  verification_method   String      @default("TOKEN_LINK")
+  verification_status   String
+  verification_comment  String?
+  verified_at           DateTime    @default(now())
+  created_at            DateTime    @default(now())
+
+  @@index([achievement_id])
+  @@index([verifier_id])
+}
+
+model Skill {
+  id                String             @id @default(uuid())
+  name              String             @unique
+  description       String?
+  category          String?
+  userSkills        UserSkill[]
+  achievementSkills AchievementSkill[]
+
+  @@index([name])
+}
+
+model UserSkill {
+  id             String           @id @default(uuid())
+  user_id        String
+  user           User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  skill_id       String
+  skill          Skill            @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+  proficiency    SkillProficiency @default(INTERMEDIATE)
+  evidence_count Int              @default(0)
+  created_at     DateTime         @default(now())
+
+  @@unique([user_id, skill_id])
+  @@index([user_id])
+  @@index([skill_id])
+}
+
+model AchievementSkill {
+  id               String      @id @default(uuid())
+  achievement_id   String
+  achievement      Achievement @relation(fields: [achievement_id], references: [id], onDelete: Cascade)
+  skill_id         String
+  skill            Skill       @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+  confidence_score Float       @default(1.0)
+  user_confirmed   Boolean     @default(true)
+
+  @@unique([achievement_id, skill_id])
+  @@index([achievement_id])
+  @@index([skill_id])
+}
+
+model Education {
+  id             String    @id @default(uuid())
+  user_id        String
+  user           User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  institution    String
+  qualification  String
+  field_of_study String?
+  start_date     DateTime
+  end_date       DateTime?
+  description    String?
+
+  @@index([user_id])
+}
+
+model Project {
+  id             String   @id @default(uuid())
+  user_id        String
+  user           User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  technologies   String[]
+  project_url    String?
+  repository_url String?
+  created_at     DateTime @default(now())
+
+  @@index([user_id])
+}
+
+model Recommendation {
+  id               String   @id @default(uuid())
+  user_id          String
+  user             User     @relation("UserRecommendations", fields: [user_id], references: [id], onDelete: Cascade)
+  recommender_id   String?
+  recommender      User?    @relation("Recommender", fields: [recommender_id], references: [id], onDelete: SetNull)
+  recommender_name String
+  relationship     String
+  content          String
+  status           String   @default("APPROVED")
+  created_at       DateTime @default(now())
+
+  @@index([user_id])
+  @@index([recommender_id])
+}
+
+model Resume {
+  id           String         @id @default(uuid())
+  user_id      String
+  user         User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  title        String
+  resume_type  ResumeType     @default(JOB)
+  content      Json
+  template     ResumeTemplate @default(MODERN_MINIMAL)
+  generated_at DateTime       @default(now())
+  updated_at   DateTime       @updatedAt
+
+  @@index([user_id])
+  @@index([resume_type])
+}
+
+model Institution {
+  id          String                  @id @default(uuid())
+  name        String
+  domain      String                  @unique
+  logo        String?
+  description String?
+  created_at  DateTime                @default(now())
+  memberships InstitutionMembership[]
+
+  @@index([domain])
+}
+
+model InstitutionMembership {
+  id             String           @id @default(uuid())
+  institution_id String
+  institution    Institution      @relation(fields: [institution_id], references: [id], onDelete: Cascade)
+  user_id        String
+  user           User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  role           InstitutionRole  @default(MEMBER)
+  status         MembershipStatus @default(ACTIVE)
+  created_at     DateTime         @default(now())
+
+  @@unique([institution_id, user_id])
+  @@index([institution_id])
+  @@index([user_id])
+}
+
+model Subscription {
+  id                    String             @id @default(uuid())
+  user_id               String             @unique
+  user                  User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  plan                  SubscriptionPlan   @default(FREE)
+  billing_provider      String?
+  billing_customer_id   String?
+  billing_subscription_id String?
+  status                SubscriptionStatus @default(ACTIVE)
+  start_date            DateTime?
+  end_date              DateTime?
+
+  @@index([user_id])
+  @@index([plan])
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  user_id    String
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  title      String
+  message    String
+  type       NotificationType @default(SYSTEM)
+  read_at    DateTime?
+  created_at DateTime         @default(now())
+
+  @@index([user_id])
+  @@index([read_at])
+}
+
+model Report {
+  id               String       @id @default(uuid())
+  reporter_id      String
+  reporter         User         @relation("Reporter", fields: [reporter_id], references: [id], onDelete: Cascade)
+  reported_user_id String?
+  reportedUser     User?        @relation("ReportedUser", fields: [reported_user_id], references: [id], onDelete: SetNull)
+  achievement_id   String?
+  achievement      Achievement? @relation(fields: [achievement_id], references: [id], onDelete: SetNull)
+  reason           String
+  status           ReportStatus @default(OPEN)
+  created_at       DateTime     @default(now())
+
+  @@index([reporter_id])
+  @@index([reported_user_id])
+  @@index([achievement_id])
+  @@index([status])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actor_id    String?
+  action      String
+  entity_type String
+  entity_id   String?
+  metadata    Json?
+  created_at  DateTime @default(now())
+
+  @@index([actor_id])
+  @@index([action])
+  @@index([entity_type])
+  @@index([created_at])
+}
